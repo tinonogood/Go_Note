@@ -21,24 +21,24 @@ var allUsers = []User {
 
 
 
-func jsonHandler (writer http.ResponseWriter, request *http.Request) {
-	js, err := json.Marshal(allUsers[0])
-	if err != nil {
-		http.Error(writer, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	writer.Header().Set("Content-Type", "application/json")
-	writer.Write(js)
-	fmt.Println(allUsers[0].Id)
-}
+//func jsonHandler (writer http.ResponseWriter, request *http.Request) {
+//	js, err := json.Marshal(allUsers[0])
+//	if err != nil {
+//		http.Error(writer, err.Error(), http.StatusInternalServerError)
+//		return
+//	}
+//
+//	writer.Header().Set("Content-Type", "application/json")
+//	writer.Write(js)
+//	fmt.Println(allUsers[0].Id)
+//}
 
 func main() {
 	for _, user := range allUsers {
 		path := "/"
 		path += strconv.Itoa(user.Id)
 		http.HandleFunc(path, func(w http.ResponseWriter, req *http.Request){
-			js, err := json.Marshal(allUsers[user.Id - 1 ])
+			js, err := json.Marshal(allUsers[user.Id - 1])
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
@@ -49,8 +49,8 @@ func main() {
 		})
 		fmt.Println(path)
 	}
-	http.HandleFunc("/json", jsonHandler)
 
+	//http.HandleFunc("/json", jsonHandler)
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
