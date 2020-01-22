@@ -19,6 +19,11 @@ var allUsers = []User {
     {Id: 2,Name: "mary", Age: 18},
 }
 
+func getUsersHTML(w http.ResponseWriter, r *http.Request){
+    tpl, _ := template.ParseFiles("users.html")
+    tpl.Execute(w, allUsers)
+}
+
 func getUser(w http.ResponseWriter, r *http.Request){
     vars := mux.Vars(r)
     idURL := vars["id"]
@@ -99,6 +104,7 @@ func deleteUser(w http.ResponseWriter, r *http.Request){
 func main() {
     r := mux.NewRouter()
 
+    r.HandleFunc("/users", getUsersHTML).Methods("GET")
     r.HandleFunc("/users/{id}", getUser).Methods("GET")
     r.HandleFunc("/users/create", createUser).Methods("POST")
     r.HandleFunc("/users/{id}", updateUser).Methods("PUT")
