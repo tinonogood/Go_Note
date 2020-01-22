@@ -113,3 +113,22 @@ func main() {
 
     http.ListenAndServe(":8080", r)
 }
+
+/* users.html
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset='utf-8'>
+        <title>Users Infomation</title>
+    </head>
+    <body>
+        {{range .}}
+            <h1>ID: {{.Id}}</h1>
+            <h2>Name: {{.Name}}</h2>
+            <h2>Age: {{.Age}}</h2>
+        {{end}}
+    </body>
+</html>
+
+ */
