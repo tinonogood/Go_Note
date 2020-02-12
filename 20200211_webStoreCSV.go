@@ -11,25 +11,27 @@ import (
     "os"
 )
 
-
 type User struct {
-    Id  int
+    Id  int64 // csv int64
     Name        string
-    Age int
+    Age int64
 }
 
 var allUsers = []User {
 }
+
 
 func getUsersHTML(w http.ResponseWriter, r *http.Request){
     tpl, _ := template.ParseFiles("users.html")
     tpl.Execute(w, allUsers)
 }
 
+
 func getUser(w http.ResponseWriter, r *http.Request){
     vars := mux.Vars(r)
     idURL := vars["id"]
-    id, _ := strconv.Atoi(idURL)
+    //id, _ := strconv.Atoi(idURL)
+    id, _ := strconv.ParseInt(idURL,0,0)
     for _, user := range allUsers {
         if user.Id == id {
             js, err :=json.Marshal(user)
@@ -43,8 +45,8 @@ func getUser(w http.ResponseWriter, r *http.Request){
     }
 }
 
-func getNewUserID() int {
-    newID := 0
+func getNewUserID() int64 {
+    newID := int64(0)
     for _, user := range allUsers {
         if (newID <= user.Id) {
             newID = user.Id + 1
@@ -52,6 +54,7 @@ func getNewUserID() int {
     }
     return newID
 }
+
 
 func createUser(w http.ResponseWriter, r *http.Request){
     w.Header().Set("Content-Type","application/json")
@@ -65,13 +68,15 @@ func createUser(w http.ResponseWriter, r *http.Request){
         return
     }
     w.Write(js)
+    writeCSV()
 }
 
 func updateUser(w http.ResponseWriter, r *http.Request){
     w.Header().Set("Content-Type","application/json")
     vars := mux.Vars(r)
     idURL := vars["id"]
-    id, _ := strconv.Atoi(idURL)
+    //id, _ := strconv.Atoi(idURL)
+    id, _ := strconv.ParseInt(idURL,0,0)
     for index, originalUser := range allUsers{
         if originalUser.Id == id{
             allUsers = append(allUsers[:index], allUsers[index+1:]...)
@@ -87,26 +92,50 @@ func updateUser(w http.ResponseWriter, r *http.Request){
             w.Write(js)
           }
     }
+    writeCSV()
 }
+
 
 func deleteUser(w http.ResponseWriter, r *http.Request){
     w.Header().Set("Content-Type","application/json")
     vars := mux.Vars(r)
     idURL := vars["id"]
-    id, _ := strconv.Atoi(idURL)
+    //id, _ := strconv.Atoi(idURL)
+    id, _ := strconv.ParseInt(idURL,0,0)
     for index, originalUser := range allUsers{
         if originalUser.Id == id{
             allUsers = append(allUsers[:index], allUsers[index+1:]...)
             break
         }
     }
+    writeCSV()
+}
+
+func writeCSV() error {
+    // write csv
+    file, err := os.Create("users.csv")
+    if err != nil{
+        return err
+    }
+
+    write := csv.NewWriter(file)
+    for _,user := range allUsers {
+        line := []string{strconv.FormatInt(user.Id,10), user.Name, strconv.FormatInt(user.Age,10)}
+        err := write.Write(line)
+        if err != nil {
+            return err
+        }
+    }
+    write.Flush()
+    return file.Close()
 }
 
 func main() {
+
     // open file
     file, err := os.Open("users.csv")
     if err != nil {
-	panic(err)
+        panic(err)
     }
 
     // read csv
@@ -114,18 +143,19 @@ func main() {
     reader.FieldsPerRecord = -1
     record, err := reader.ReadAll()
     if err != nil {
-	panic(err)
+        panic(err)
     }
 
     for _, item := range record {
         var user User
-	id64,_ = strconv.ParseInt(item[0],0,0)
-	user.Id = 
-	user.Name = item[1]
-	age64,_ = strconv.ParseInt(item[3],0,0)
-	allUsers = append(allUsers, user)
-	fmt.Printf("id: %d, name: %s, age: %d\n", user.Id, user.Name, user.Age)
+        user.Id, _ = strconv.ParseInt(item[0],0,0)
+        user.Name = item[1]
+        user.Age, _ = strconv.ParseInt(item[2],0,0)
+        allUsers = append(allUsers, user)
+        fmt.Printf("id: %d, name: %s, age: %d\n", user.Id, user.Name, user.Age)
     }
+
+    file.Close()
 
     r := mux.NewRouter()
     r.HandleFunc("/users", getUsersHTML).Methods("GET")
@@ -135,23 +165,6 @@ func main() {
     r.HandleFunc("/users/{id}", deleteUser).Methods("DELETE")
 
     http.ListenAndServe(":8080", r)
+
 }
-
-/* users.html
-
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset='utf-8'>
-        <title>Users Infomation</title>
-    </head>
-    <body>
-        {{range .}}
-            <h1>ID: {{.Id}}</h1>
-            <h2>Name: {{.Name}}</h2>
-            <h2>Age: {{.Age}}</h2>
-        {{end}}
-    </body>
-</html>
-
- */
+      	
