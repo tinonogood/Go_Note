@@ -6,18 +6,21 @@ import (
     "strconv"
     "github.com/gorilla/mux"
     "html/template"
-    "github.com/lib/pg"
+    _ "github.com/lib/pq"
     "database/sql"
+    "fmt"
 )
+
 
 const (
-    host	= "127.0.0.1"
-    port	= 5432
-    user	= "user"
-    password	= "password"
-    dbname	= "db"
+    host        = "127.0.0.1"
+    port        = 5432
+    user        = "user"
+    password    = "password"
+    dbname      = "dbname"
 )
 
+var Db *sql.DB
 
 type User struct {
     Id  int
@@ -25,50 +28,64 @@ type User struct {
     Age int
 }
 
+func init() {
+    var err error
+    psqlInfo := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", host, port, user, password, dbname)
+    Db, err = sql.Open("postgres", psqlInfo)
+    if err != nil {
+        panic(err)
+    }
+}
+
 func getUsersHTML(w http.ResponseWriter, r *http.Request){
+    users,_ := getUsers(10)
     tpl, _ := template.ParseFiles("users.html")
-    tpl.Execute(w, allUsers)
+    tpl.Execute(w, users)
 }
 
 func getUser(w http.ResponseWriter, r *http.Request){
     vars := mux.Vars(r)
     idURL := vars["id"]
     id, _ := strconv.Atoi(idURL)
-    for _, user := range allUsers {
-        if user.Id == id {
-            js, err :=json.Marshal(user)
-            if err != nil{
-                http.Error(w, err.Error(), http.StatusInternalServerError)
-                return
-            }
-            w.Header().Set("Content-Type","application/json")
-            w.Write(js)
-        }
-    }
+    var user User
+    var err error
+    err = Db.QueryRow("SELECT id, name, age FROM users WHERE id = $1", id).Scan(&user.Id, &user.Name, &user.Age)
 }
 
-func getNewUserID() int {
-    newID := 0
-    for _, user := range allUsers {
-        if (newID <= user.Id) {
-            newID = user.Id + 1
-        }
+func getUsers(limit int) (users []User, err error) {
+    rows, err := Db.Query("SELECT id, name, age FROM users limit $1", limit)
+    if err != nil {
+        return
     }
-    return newID
+    for rows.Next() {
+        user := User{}
+        err = rows.Scan(&user.Id, &user.Name, &user.Age)
+        if err != nil {
+            return
+        }
+        users = append(users, user)
+    }
+    rows.Close()
+    return
 }
+
 
 func createUser(w http.ResponseWriter, r *http.Request){
     w.Header().Set("Content-Type","application/json")
     var user User
     _ = json.NewDecoder(r.Body).Decode(&user)
-    user.Id = getNewUserID()
-    allUsers = append(allUsers, user)
+    var err error
+    _, err = Db.Exec("INSERT INTO users (name, age) VALUES ($1, $2)", user.Name, user.Age)
+    if err != nil{
+        fmt.Println("create wrongly")
+    }
     js, err := json.Marshal(user)
     if err != nil{
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
     w.Write(js)
+    return
 }
 
 func updateUser(w http.ResponseWriter, r *http.Request){
@@ -76,21 +93,18 @@ func updateUser(w http.ResponseWriter, r *http.Request){
     vars := mux.Vars(r)
     idURL := vars["id"]
     id, _ := strconv.Atoi(idURL)
-    for index, originalUser := range allUsers{
-        if originalUser.Id == id{
-            allUsers = append(allUsers[:index], allUsers[index+1:]...)
-            var updateUser User
-            _ = json.NewDecoder(r.Body).Decode(&updateUser)
-            updateUser.Id = id
-            allUsers = append(allUsers, updateUser)
-            js, err := json.Marshal(updateUser)
-            if err != nil{
-                http.Error(w, err.Error(), http.StatusInternalServerError)
-                return
-            }
-            w.Write(js)
-          }
+    var updateUser User
+    _ = json.NewDecoder(r.Body).Decode(&updateUser)
+    updateUser.Id = id
+    var err error
+    _, err = Db.Exec("UPDATE users SET name = $2, age = $3 WHERE id = $1", updateUser.Id, updateUser.Name, updateUser.Age)
+    js, err :=json.Marshal(updateUser)
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
     }
+    w.Write(js)
+    return
 }
 
 func deleteUser(w http.ResponseWriter, r *http.Request){
@@ -98,18 +112,17 @@ func deleteUser(w http.ResponseWriter, r *http.Request){
     vars := mux.Vars(r)
     idURL := vars["id"]
     id, _ := strconv.Atoi(idURL)
-    for index, originalUser := range allUsers{
-        if originalUser.Id == id{
-            allUsers = append(allUsers[:index], allUsers[index+1:]...)
-            break
-        }
+    var err error
+    _, err = Db.Exec("DELETE FROM users WHERE id = $1", id)
+    if err != nil{
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
     }
 }
 
 
 func main() {
     r := mux.NewRouter()
-
     r.HandleFunc("/users", getUsersHTML).Methods("GET")
     r.HandleFunc("/users/{id}", getUser).Methods("GET")
     r.HandleFunc("/users/create", createUser).Methods("POST")
@@ -119,21 +132,14 @@ func main() {
     http.ListenAndServe(":8080", r)
 }
 
-/* users.html
-
-<!DOCTYPE html>
-<html>
-    <head>
-        <meta charset='utf-8'>
-        <title>Users Infomation</title>
-    </head>
-    <body>
-        {{range .}}
-            <h1>ID: {{.Id}}</h1>
-            <h2>Name: {{.Name}}</h2>
-            <h2>Age: {{.Age}}</h2>
-        {{end}}
-    </body>
-</html>
-
- */
+/*
+postgres=# \d users
+                            Table "public.users"
+ Column |  Type   | Collation | Nullable |              Default              
+--------+---------+-----------+----------+-----------------------------------
+ id     | integer |           | not null | nextval('users_id_seq'::regclass)
+ name   | text    |           | not null | 
+ age    | integer |           | not null | 
+Indexes:
+    "users_pkey" PRIMARY KEY, btree (id)
+*/
